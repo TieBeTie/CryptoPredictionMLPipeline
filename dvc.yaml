@@ -1,0 +1,40 @@
+stages:
+  download_data:
+    cmd: python3 src/data/download_dataset.py
+    deps:
+      - src/data/download_dataset.py
+    outs:
+      - data/raw/test
+    frozen: true
+  
+  process_data:
+    cmd: python3 src/data/make_dataset.py
+    deps:
+      - src/data/make_dataset.py
+      - data/raw/test
+    outs:
+      - data/processed/crypto.parquet:
+          cache: true
+    frozen: false
+    
+  build_features:
+    cmd: python3 src/features/build_features.py
+    deps:
+      - src/features/build_features.py
+      - data/processed/crypto.parquet
+    outs:
+      - data/processed/features.parquet:
+          cache: true
+    frozen: false
+    
+  train_model:
+    cmd: python3 src/models/train_model.py
+    deps:
+      - src/models/train_model.py
+      - data/processed/features.parquet
+    outs:
+      - models/model.onnx
+    metrics:
+      - reports/metrics.json:
+          cache: false 
+    frozen: false

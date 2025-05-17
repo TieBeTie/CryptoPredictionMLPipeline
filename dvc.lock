@@ -1,0 +1,68 @@
+schema: '2.0'
+stages:
+  download_data:
+    cmd: python src/data/download_dataset.py
+    deps:
+    - path: src/data/download_dataset.py
+      hash: md5
+      md5: c62fdf5792bd0fc7cc10b499dd971233
+      size: 2949
+    outs:
+    - path: data/raw/test
+      hash: md5
+      md5: d751713988987e9331980363e24189ce.dir
+      size: 0
+      nfiles: 0
+  process_data:
+    cmd: python src/data/make_dataset.py
+    deps:
+    - path: data/raw/test
+      hash: md5
+      md5: 8191497ea940a2c27833ffacb94cb7c1.dir
+      size: 193
+      nfiles: 2
+    - path: src/data/make_dataset.py
+      hash: md5
+      md5: 54f6f0d79d1d6f718045995ef580c8c4
+      size: 8193
+    outs:
+    - path: data/processed/crypto.parquet
+      hash: md5
+      md5: a5e1b4c60e0f7a5802816b03265cb637
+      size: 5668
+  build_features:
+    cmd: python src/features/build_features.py
+    deps:
+    - path: data/processed/crypto.parquet
+      hash: md5
+      md5: a5e1b4c60e0f7a5802816b03265cb637
+      size: 5668
+    - path: src/features/build_features.py
+      hash: md5
+      md5: f0e147112b2c6a14e3de141b0ea353d2
+      size: 10744
+    outs:
+    - path: data/processed/features.parquet
+      hash: md5
+      md5: 03c05055d3835a470802c389ed234111
+      size: 27953
+  train_model:
+    cmd: python src/models/train_model.py
+    deps:
+    - path: data/processed/features.parquet
+      hash: md5
+      md5: 03c05055d3835a470802c389ed234111
+      size: 27953
+    - path: src/models/train_model.py
+      hash: md5
+      md5: 18ee1e41ad621cf0926490db0d7dfb05
+      size: 17388
+    outs:
+    - path: models/model.onnx
+      hash: md5
+      md5: d41d8cd98f00b204e9800998ecf8427e
+      size: 0
+    - path: reports/metrics.json
+      hash: md5
+      md5: d41d8cd98f00b204e9800998ecf8427e
+      size: 0

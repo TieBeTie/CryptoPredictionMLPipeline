@@ -1,0 +1,31 @@
+# Add patterns of files dvc should ignore, which could improve
+# the performance. Learn more at
+# https://dvc.org/doc/user-guide/dvcignore
+
+# Files and directories to be ignored by DVC
+
+# Python and development
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.venv
+env/
+venv/
+ENV/
+.ipynb_checkpoints
+
+# MLflow directories
+mlruns/
+
+# Logs
+*.log
+
+# Editors
+.vscode/
+.idea/
+
+# Large binary files that don't need to be tracked
+*.zip
+*.csv
