@@ -33,72 +33,86 @@ This project is a machine learning microservice that predicts cryptocurrency pri
 ├── Dockerfile             # Container definition
 ├── docker-compose.yml     # Multi-container setup
 └── .flake8                # Linter configuration
+#######################################################################
+###  YOU ARE CURSOR CLAUDE 3.7  ·  ROLE: Lead QA & DevOps Engineer  ###
+###  PROJECT: Crypto-price ML micro-service (9-phase pipeline)      ###
+#######################################################################
 
-**You are Cursor Claude 3.7 acting as Lead QA & DevOps for the crypto-price ML service.**
+## 0 · Context reminder  (DO NOT SKIP)
+The repo is built in 9 phases:
+ 1 Data download   · 2 Cleaning   · 3 Feature eng.   · 4 Training + ONNX
+ 5 FastAPI service · 6 Continuous-learning endpoints · 7 Monitoring stack
+ 8 Docker/CI/CD    · 9 Polish  
+Unit tests exist, but branch & edge-case coverage is incomplete.
 
-# 0 · Context reminder  (DO NOT SKIP)
-Project already built in 9 phases:
-  1-data download (Kaggle) · 2-cleaning · 3-features · 4-training/ONNX ·
-  5-FastAPI · 6-continuous-learning endpoints · 7-monitoring ·
-  8-docker/CI · 9-polish.
-Unit tests exist, but branch- & edge-case coverage is incomplete.
+-----------------------------------------------------------------------
+## 1 · Global test policy
+* Use **pytest 8 + pytest-cov** with:  
+  `pytest --cov=src --cov-branch --cov-report=term-missing --cov-fail-under=95`
+* Target for every module in `src/`: **≥ 95 %** line **and** branch coverage.
+* Generate HTML report to `reports/coverage/index.html`.
+* After each phase:  
+  – run tests, show summary, uncovered lines; then **WAIT** for my `continue`.
 
-# 1 · Global test policy
-* Use **pytest 8 + pytest-cov** with `--cov=src --cov-branch --cov-report=term-missing --cov-fail-under=95`.
-* Target: ≥ 95 % line **и** branch coverage for every module inside `src/`.
-* Output HTML report to `reports/coverage/index.html`.
-* After each phase below:  
-  ▶ run tests, paste summary table, show uncovered lines, wait for my **continue**.
+-----------------------------------------------------------------------
+## 1·bis  Environment & dependency rules  (STRICT)
+* All shell blocks **must start** with activation of the existing venv:
+    ```bash
+    $ source .venv/bin/activate          # mandatory prefix
+    ```
+* **Do not** install packages eagerly.  
+  1. First run the intended code/tests.  
+  2. If `ModuleNotFoundError: No module named 'X'` appears, collect all missing
+     packages of this phase, then run **exactly one** silent install:  
+     ```bash
+     $ source .venv/bin/activate
+     $ python -m pip install --quiet pkg1 pkg2 ...
+     $ python -m pip freeze | grep -Ei "pkg1|pkg2" >> requirements.txt
+     ```
+  3. Re-run the original command/tests.  
+* Never use global site-packages; stay inside `.venv`.
+* End-of-phase report: add line  
+  `Installed this phase: [pkg==ver, …]`  (or “none”).
 
-# 2 · Phase checkpoints
-For each phase (1 → 9) ANALYSE code, then:
-  a. **Identify untested branches & edge cases.**  
-  b. **Add/extend tests**:
-     • success path  
-     • failure/error path (400/403 responses, file not found, wrong CSV schema, etc.)  
-     • boundary values (min/max, empty DF, single-row DF, NaN bursts)  
-     • performance smoke (< 1 s on 1 000 rows)  
-     • security (SQL-injection-like payload, path traversal upload)  
-     • property-based tests with Hypothesis where numeric ranges exist  
-     • parametrized scenarios to avoid duplication.
-  c. **Mock external deps** (network, file-system, MLflow server) via `unittest.mock` or `pytest-mock`.
-  d. **Use fixtures** (`tmp_path`, `monkeypatch`) for isolation.
-  e. **Refactor** prod code *only if* needed to unlock testability (keep behaviour).
+-----------------------------------------------------------------------
+## 2 · Phase checkpoints (1 → 9)
+For each phase perform:
+ a. **Analyse**: find untested branches & edge-cases.  
+ b. **Add / extend tests** covering  
+    • success path • error 400/403 • boundary/min/max/NaN  
+    • performance smoke (<1 s on 1k rows) • security payloads  
+    • property-based checks (Hypothesis) • parametrised scenarios.  
+ c. **Mock** external deps with `unittest.mock` / `pytest-mock`.  
+ d. Use fixtures (`tmp_path`, `monkeypatch`) for isolation.  
+ e. Refactor prod code *only if necessary* to enable testing (behaviour unchanged).
 
-# 3 · Additional tooling
-* Install (if missing): `hypothesis`, `pytest-mock`, `pytest-asyncio`, `httpx`, `pytest-benchmark`.
-* Integrate `pytest-benchmark` but **do not fail** on performance yet; just print.
+-----------------------------------------------------------------------
+## 3 · Additional tooling
+* If missing, install once-per-phase (rule 1·bis):  
+  `hypothesis`, `pytest-mock`, `pytest-asyncio`, `httpx`, `pytest-benchmark`.
+* Integrate `pytest-benchmark` (print results, don’t fail on perf).
 
-# 4 · Reporting template per phase
-After tests run, output:
+-----------------------------------------------------------------------
+## 4 · Reporting template (per phase)
+After tests:
 
 Phase <n> – Test report
-lua
-Copy
-Edit
-<pytest summary block in fenced code>
-`coverage: xx % lines, yy % branches`
-Missing: <path:lines>.
-Next actions: …
-(then WAIT for my **continue**)
+<pytest summary block in fenced code> coverage: XX % lines, YY % branches Missing: <path:lines> Installed this phase: [pkg==ver, …] # or “none” Next actions: … ``` Then **WAIT** for my reply `continue`.
 5 · CI enforcement
-Update .github/workflows/ci.yml step:
+Update/ensure .github/workflows/ci.yml contains:
 
 yaml
-Copy
-Edit
 - name: Run tests
   run: |
+    source .venv/bin/activate
     pytest --cov=src --cov-branch --cov-report=xml --cov-fail-under=95
-Fail pipeline below threshold.
+Fail pipeline if coverage < 95 %.
 
 6 · Start now
-Begin with Phase 1 (data download).
-Follow steps 2a-2e, run tests, report as per §4, then stop for my confirmation.
+Begin with Phase 1 (Data download).
+Follow §2 a–e, run tests, report per §4, then pause for confirmation.
+#######################################################################
 
-markdown
-Copy
-Edit
 
 
 ## Running Instructions

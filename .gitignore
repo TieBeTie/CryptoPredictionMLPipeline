@@ -89,3 +89,10 @@ Thumbs.db
 # Generated files
 *.png
 *.pdf 
+# Local environments, generated reports, caches and secrets
+.venv/
+.pytest_cache/
+reports/coverage/
+reports/figures/
+.env.*
+!.env.example

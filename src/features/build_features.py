@@ -145,7 +145,7 @@ def calculate_technical_indicators(df):
     # 6. Rate of Change
     for window in [5, 10, 20]:
         features_df[f'roc_{window}'] = grouped['close'].transform(
-            lambda x: x.pct_change(periods=window)
+            lambda x: x.pct_change(periods=window, fill_method=None)
         )
 
     # 7. Stochastic Oscillator
@@ -189,7 +189,7 @@ def create_target_variables(df):
     features_df['target_next_day_close'] = grouped['close'].transform(lambda x: x.shift(-1))
 
     # 2. Returns (percentage change)
-    features_df['target_next_day_return'] = grouped['close'].transform(lambda x: x.pct_change(-1))
+    features_df['target_next_day_return'] = grouped['close'].transform(lambda x: x.pct_change(-1, fill_method=None))
 
     # 3. Binary classification label (up/down)
     features_df['target_next_day_direction'] = np.sign(features_df['target_next_day_return'])

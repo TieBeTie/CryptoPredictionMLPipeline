@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """Tests for the data processing module."""
+import os
+import shutil
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import matplotlib
 import numpy as np
 import pandas as pd
+import pytest
+from hypothesis import given, settings, strategies as st
 
 from src.data.make_dataset import (
     FIGURES_PATH,
@@ -13,6 +20,7 @@ from src.data.make_dataset import (
     clean_data,
     generate_eda_figures,
     load_raw_data,
+    main,
     save_processed_data,
     setup_directories,
 )
@@ -209,6 +217,247 @@ class TestMakeDataset(unittest.TestCase):
             0,
             f"There should be no null values in the DataFrame. Found: {null_counts}"
         )
+
+    # New test cases for improved coverage:
+
+    def test_load_raw_data_no_files(self):
+        """Test error handling when no CSV files are found."""
+        # Create a temporary directory
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # Patch the RAW_DATA_PATH with the temporary directory
+            with patch('src.data.make_dataset.RAW_DATA_PATH', Path(tmpdirname)):
+                # No CSV files exist in the temporary directory
+                with self.assertRaises(FileNotFoundError):
+                    load_raw_data()
+
+    @patch('pandas.read_csv')
+    def test_load_raw_data_with_error(self, mock_read_csv):
+        """Test error handling when reading a CSV file fails."""
+        # Set up the mock to raise an exception
+        mock_read_csv.side_effect = Exception("Error reading CSV")
+
+        # Create a temporary directory with a test CSV file
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            # Create a dummy CSV file
+            temp_path = Path(tmpdirname)
+            (temp_path / "test.csv").touch()
+            
+            # Patch the RAW_DATA_PATH
+            with patch('src.data.make_dataset.RAW_DATA_PATH', temp_path):
+                # This should now raise a ValueError because no DataFrames could be created
+                with self.assertRaises(ValueError):
+                    load_raw_data()
+
+    def test_clean_data_with_missing_values(self):
+        """Test data cleaning when there are missing values."""
+        # Create a DataFrame with missing values
+        df = pd.DataFrame({
+            'date': pd.date_range(start='2023-01-01', periods=5),
+            'open': [1.0, 2.0, np.nan, 4.0, 5.0],
+            'high': [1.5, 2.5, 3.5, np.nan, 5.5],
+            'low': [0.5, 1.5, np.nan, 3.5, 4.5],
+            'close': [1.2, 2.2, 3.2, 4.2, np.nan],
+            'volume': [1000, np.nan, 3000, 4000, 5000],
+            'market_cap': [1e6, 2e6, 3e6, 4e6, np.nan],
+            'symbol': ['BTC', 'BTC', 'BTC', 'BTC', 'BTC']
+        })
+
+        # Clean the data
+        cleaned_df = clean_data(df)
+
+        # Check that the cleaned DataFrame has no missing values
+        self.assertEqual(cleaned_df.isnull().sum().sum(), 0, 
+                        "Cleaned DataFrame should have no missing values")
+
+    def test_clean_data_with_non_numeric_data(self):
+        """Test data cleaning when there are non-numeric values that need coercion."""
+        # Create a DataFrame with non-numeric values in numeric columns
+        df = pd.DataFrame({
+            'date': pd.date_range(start='2023-01-01', periods=5),
+            'open': [1.0, '2.0', 3.0, '4.0', 5.0],  # Mix of strings and numbers
+            'high': [1.5, 2.5, '3.5', 4.5, '5.5'],
+            'low': ['0.5', 1.5, 2.5, '3.5', 4.5],
+            'close': [1.2, '2.2', 3.2, '4.2', 5.2],
+            'volume': ['1000', 2000, '3000', 4000, '5000'],
+            'market_cap': [1e6, '2e6', 3e6, '4e6', 5e6],
+            'symbol': ['BTC', 'BTC', 'BTC', 'BTC', 'BTC']
+        })
+
+        # Clean the data
+        cleaned_df = clean_data(df)
+
+        # Check that all numeric columns are actually numeric
+        numeric_cols = ['open', 'high', 'low', 'close', 'volume', 'market_cap']
+        for col in numeric_cols:
+            self.assertTrue(pd.api.types.is_numeric_dtype(cleaned_df[col]),
+                          f"Column {col} should be numeric after cleaning")
+
+    def test_clean_data_with_zero_prices(self):
+        """Test that rows with zero prices are removed."""
+        # Create a DataFrame with zero prices
+        df = pd.DataFrame({
+            'date': pd.date_range(start='2023-01-01', periods=5),
+            'open': [1.0, 0.0, 3.0, 4.0, 5.0],  # Zero price
+            'high': [1.5, 2.5, 0.0, 4.5, 5.5],  # Zero price
+            'low': [0.5, 1.5, 2.5, 0.0, 4.5],   # Zero price
+            'close': [1.2, 2.2, 3.2, 4.2, 0.0], # Zero price
+            'volume': [1000, 2000, 3000, 4000, 5000],
+            'market_cap': [1e6, 2e6, 3e6, 4e6, 5e6],
+            'symbol': ['BTC', 'BTC', 'BTC', 'BTC', 'BTC']
+        })
+
+        # Clean the data
+        cleaned_df = clean_data(df)
+
+        # Check that rows with zero prices are removed
+        price_cols = ['open', 'high', 'low', 'close']
+        for col in price_cols:
+            self.assertTrue((cleaned_df[col] > 0).all(), 
+                          f"All values in {col} should be positive after cleaning")
+        
+        # Check that the DataFrame has fewer rows than the original
+        self.assertLess(len(cleaned_df), len(df), 
+                       "Cleaned DataFrame should have fewer rows than original")
+
+    def test_clean_data_with_negative_prices(self):
+        """Test that rows with negative prices are removed."""
+        # Create a DataFrame with negative prices
+        df = pd.DataFrame({
+            'date': pd.date_range(start='2023-01-01', periods=5),
+            'open': [1.0, -2.0, 3.0, 4.0, 5.0],  # Negative price
+            'high': [1.5, 2.5, -3.5, 4.5, 5.5],  # Negative price
+            'low': [0.5, 1.5, 2.5, -3.5, 4.5],   # Negative price
+            'close': [1.2, 2.2, 3.2, 4.2, -5.2], # Negative price
+            'volume': [1000, 2000, 3000, 4000, 5000],
+            'market_cap': [1e6, 2e6, 3e6, 4e6, 5e6],
+            'symbol': ['BTC', 'BTC', 'BTC', 'BTC', 'BTC']
+        })
+
+        # Clean the data
+        cleaned_df = clean_data(df)
+
+        # Check that rows with negative prices are removed
+        price_cols = ['open', 'high', 'low', 'close']
+        for col in price_cols:
+            self.assertTrue((cleaned_df[col] > 0).all(), 
+                          f"All values in {col} should be positive after cleaning")
+        
+        # Check that the DataFrame has fewer rows than the original
+        self.assertLess(len(cleaned_df), len(df), 
+                       "Cleaned DataFrame should have fewer rows than original")
+
+    def test_main_function(self):
+        """Test the main function that runs the entire pipeline."""
+        # Run the main function
+        result = main()
+        
+        # Check the result
+        self.assertIsInstance(result, tuple, "Result should be a tuple")
+        self.assertEqual(len(result), 3, "Result should have 3 elements")
+        
+        cleaned_df, pdf_path, parquet_path = result
+        
+        # Check that the DataFrame is not empty
+        self.assertFalse(cleaned_df.empty, "DataFrame should not be empty")
+        
+        # Check that the PDF file exists
+        self.assertTrue(pdf_path.exists(), "PDF file should exist")
+        self.assertGreater(pdf_path.stat().st_size, 0, "PDF file should not be empty")
+        
+        # Check that the parquet file exists
+        self.assertTrue(parquet_path.exists(), "Parquet file should exist")
+        self.assertGreater(parquet_path.stat().st_size, 0, "Parquet file should not be empty")
+
+    @patch('src.data.make_dataset.load_raw_data')
+    def test_main_function_with_exception(self, mock_load_raw_data):
+        """Test error handling in the main function."""
+        # Configure the mock to raise an exception
+        mock_load_raw_data.side_effect = Exception("Test error")
+        
+        # This should raise the exception
+        with self.assertRaises(Exception):
+            main()
+
+    @given(
+        missing_pct=st.floats(min_value=0.0, max_value=0.5),
+        n_rows=st.integers(min_value=5, max_value=20)
+    )
+    @settings(max_examples=10)
+    def test_property_based_missing_values(self, missing_pct, n_rows):
+        """Property-based test for handling missing values with different percentages."""
+        # Create test data with missing values
+        df = pd.DataFrame({
+            'date': pd.date_range(start='2023-01-01', periods=n_rows),
+            'open': np.random.uniform(100, 1000, n_rows),
+            'high': np.random.uniform(100, 1000, n_rows),
+            'low': np.random.uniform(100, 1000, n_rows),
+            'close': np.random.uniform(100, 1000, n_rows),
+            'volume': np.random.uniform(1000, 10000, n_rows),
+            'market_cap': np.random.uniform(1e6, 1e7, n_rows),
+            'symbol': ['TEST'] * n_rows
+        })
+        
+        # Add missing values according to the percentage
+        mask = np.random.random(df.shape) < missing_pct
+        df = df.mask(mask)
+        
+        # Clean the data
+        cleaned_df = clean_data(df)
+        
+        # Check that the cleaned DataFrame has no missing values
+        self.assertEqual(cleaned_df.isnull().sum().sum(), 0, 
+                        "Cleaned DataFrame should have no missing values")
+
+
+@pytest.mark.benchmark
+def test_setup_directories_performance(benchmark):
+    """Test the performance of the setup_directories function."""
+    # Use benchmark to measure the function's performance
+    benchmark(setup_directories)
+
+
+@pytest.mark.benchmark
+def test_clean_data_performance(benchmark):
+    """Test the performance of the clean_data function."""
+    # Create a larger test DataFrame
+    n_rows = 1000
+    df = pd.DataFrame({
+        'date': pd.date_range(start='2023-01-01', periods=n_rows),
+        'open': np.random.uniform(100, 1000, n_rows),
+        'high': np.random.uniform(100, 1000, n_rows),
+        'low': np.random.uniform(100, 1000, n_rows),
+        'close': np.random.uniform(100, 1000, n_rows),
+        'volume': np.random.uniform(1000, 10000, n_rows),
+        'market_cap': np.random.uniform(1e6, 1e7, n_rows),
+        'symbol': np.random.choice(['BTC', 'ETH', 'XRP'], n_rows)
+    })
+    
+    # Add some missing values
+    mask = np.random.random(df.shape) < 0.05  # 5% missing
+    df = df.mask(mask)
+    
+    # Use benchmark to measure the function's performance
+    benchmark(lambda: clean_data(df))
+
+
+@pytest.mark.benchmark
+def test_save_processed_data_performance(benchmark):
+    """Test the performance of the save_processed_data function."""
+    # Create a test DataFrame
+    n_rows = 1000
+    df = pd.DataFrame({
+        'date': pd.date_range(start='2023-01-01', periods=n_rows),
+        'open': np.random.uniform(100, 1000, n_rows),
+        'high': np.random.uniform(100, 1000, n_rows),
+        'low': np.random.uniform(100, 1000, n_rows),
+        'close': np.random.uniform(100, 1000, n_rows),
+        'volume': np.random.uniform(1000, 10000, n_rows),
+        'market_cap': np.random.uniform(1e6, 1e7, n_rows),
+        'symbol': np.random.choice(['BTC', 'ETH', 'XRP'], n_rows)
+    })
+    
+    # Use benchmark to measure the function's performance
+    benchmark(lambda: save_processed_data(df))
 
 
 if __name__ == "__main__":
